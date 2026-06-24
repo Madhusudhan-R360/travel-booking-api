@@ -8,6 +8,7 @@ app.include_router(bookings.router)
 
 @app.get("/")
 def home():
+    print("Validation check added")
     return {"message": "Welcome to Travel API"}
 
 @app.get("/health")
