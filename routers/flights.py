@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from bson import ObjectId
-from typing import List
+from typing import List, Optional
 
 from models.flight import FlightResponse, FlightCreate
 from database.connection import flights_collection, bookings_collection
@@ -49,7 +49,7 @@ def add_flight(flight: FlightCreate):
 
 # ✅ Get Flights
 @router.get("/flights", response_model=List[FlightResponse])
-def get_flights(limit: int = 5, skip: int = 0, sort: str = None, max_price: int = None):
+def get_flights(limit: int = 5, skip: int = 0, sort: Optional[str] = None, max_price: Optional[int] = None):
 
     query = {
         "status": "active",
@@ -59,36 +59,33 @@ def get_flights(limit: int = 5, skip: int = 0, sort: str = None, max_price: int 
     if max_price is not None:
         query["price"] = {"$lte": max_price}
 
-    sort_order = None
-    if sort == "price_asc":
-        sort_order = ("price", 1)
-    elif sort == "price_desc":
-        sort_order = ("price", -1)
-
-    flights = []
     cursor = flights_collection.find(query)
 
-    if sort_order:
-        cursor = cursor.sort(*sort_order)
+    if sort == "price_asc":
+        cursor = cursor.sort("price", 1)
+    elif sort == "price_desc":
+        cursor = cursor.sort("price", -1)
 
     cursor = cursor.skip(skip).limit(limit)
 
+    flights = []
+
     for flight in cursor:
-        flight.pop("_id", None)
+        flight["_id"] = str(flight["_id"])  # ✅ FIX: keep id
 
         # ✅ availability info
-        if flight["seats"] <= 3:
-            flight["availability"] = f"Only {flight['seats']} seats left"
+        if flight.get("seats", 0) <= 3:
+            flight["availability"] = f"Only {flight.get('seats')} seats left"
         else:
             flight["availability"] = "Available"
 
         flights.append(flight)
 
-    return flights   # ✅ IMPORTANT
+    return flights
 
 
 # ✅ Search Flights
-@router.get("/flights/search/")
+@router.get("/flights/search")
 def search_flights(source: str, destination: str, date: str):
 
     if source.lower() == destination.lower():
@@ -105,19 +102,19 @@ def search_flights(source: str, destination: str, date: str):
     flights = []
 
     for flight in flights_collection.find(query):
-        flight.pop("_id", None)
+        flight["_id"] = str(flight["_id"])  # ✅ FIX
 
-        if flight["seats"] <= 3:
-            flight["availability"] = f"Only {flight['seats']} seats left"
+        if flight.get("seats", 0) <= 3:
+            flight["availability"] = f"Only {flight.get('seats')} seats left"
         else:
             flight["availability"] = "Available"
 
         flights.append(flight)
 
     if not flights:
-        return {"message": "No flights found for this route on given date"}
+        return {"message": "No flights found"}
 
-    return {"flights": flights}   # ✅ IMPORTANT
+    return {"flights": flights}
 
 
 # ✅ Full Update
@@ -145,7 +142,7 @@ def update_flight(flight_id: str, flight: FlightCreate):
 
 # ✅ Partial Update
 @router.patch("/flights/{flight_id}")
-def update_flight_partial(flight_id: str, price: int = None, seats: int = None):
+def update_flight_partial(flight_id: str, price: Optional[int] = None, seats: Optional[int] = None):
 
     try:
         obj_id = ObjectId(flight_id)
@@ -178,7 +175,7 @@ def update_flight_partial(flight_id: str, price: int = None, seats: int = None):
     return {"message": "Flight updated partially"}
 
 
-# ✅ Cancel Flight (with booking cascade)
+# ✅ Cancel Flight
 @router.put("/flights/{flight_id}/cancel")
 def cancel_flight(flight_id: str):
 
@@ -200,11 +197,9 @@ def cancel_flight(flight_id: str):
     if result.matched_count == 0:
         raise HTTPException(404, "Flight not found")
 
-    # ✅ Cancel all related bookings
+    # ✅ FIX: correct flight_id type handling
     bookings_collection.update_many(
-        {
-            "flight_id": str(flight_object_id)
-        },
+        {"flight_id": str(flight_object_id)},
         {
             "$set": {
                 "status": "cancelled",

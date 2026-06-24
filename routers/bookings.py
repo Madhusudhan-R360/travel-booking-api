@@ -13,11 +13,11 @@ router = APIRouter()
 @router.post("/book")
 def book_flight(booking: Booking):
 
-    # ✅ Validate seats per booking
+    # ✅ FIX: correct operator
     if booking.seats <= 0 or booking.seats > 3:
         raise HTTPException(
             status_code=400,
-            detail="You can book between 1 and 3 seats per booking"
+            detail="You can book between 1 and 3 seats"
         )
 
     # ✅ Find flight
@@ -30,7 +30,7 @@ def book_flight(booking: Booking):
     })
 
     if not flight:
-        raise HTTPException(status_code=404, detail="Flight not found")
+        raise HTTPException(404, "Flight not found")
 
     # ✅ Booking limit per user
     booking_count = bookings_collection.count_documents({
@@ -39,26 +39,18 @@ def book_flight(booking: Booking):
     })
 
     if booking_count >= 3:
-        raise HTTPException(
-            status_code=400,
-            detail="You can have a maximum of 3 bookings"
-        )
+        raise HTTPException(400, "Maximum 3 bookings allowed")
 
     # ✅ Prevent duplicate booking
     existing_booking = bookings_collection.find_one({
         "user_name": booking.user_name,
         "flight_name": booking.flight_name,
-        "source": booking.source,
-        "destination": booking.destination,
         "date": booking.date,
         "status": "confirmed"
     })
 
     if existing_booking:
-        raise HTTPException(
-            status_code=400,
-            detail="You have already booked this flight"
-        )
+        raise HTTPException(400, "Already booked this flight")
 
     # ✅ Prevent past booking
     try:
@@ -66,6 +58,7 @@ def book_flight(booking: Booking):
             f"{flight['date']} {flight['time']}",
             "%Y-%m-%d %H:%M"
         )
+
         if flight_datetime < datetime.now():
             raise HTTPException(400, "Cannot book past flights")
 
@@ -78,15 +71,13 @@ def book_flight(booking: Booking):
             "_id": flight["_id"],
             "seats": {"$gte": booking.seats}
         },
-        {
-            "$inc": {"seats": -booking.seats}
-        }
+        {"$inc": {"seats": -booking.seats}}
     )
 
     if update_result.modified_count == 0:
         raise HTTPException(400, "Not enough seats available")
 
-    # ✅ Generate booking reference
+    # ✅ Booking reference
     booking_ref = f"FL{random.randint(10000, 99999)}"
 
     # ✅ Create booking
@@ -118,26 +109,21 @@ def book_flight(booking: Booking):
 @router.get("/bookings")
 def get_all_bookings(limit: int = 5, skip: int = 0):
 
-    bookings = []
-
     cursor = bookings_collection.find().sort("created_at", -1).skip(skip).limit(limit)
 
+    bookings = []
     for booking in cursor:
         booking["_id"] = str(booking["_id"])
         bookings.append(booking)
 
-    return {
-        "count": len(bookings),
-        "bookings": bookings
-    }
+    return {"count": len(bookings), "bookings": bookings}
 
 
-# ✅ GET BOOKINGS BY USER
+# ✅ GET USER BOOKINGS
 @router.get("/bookings/{user_name}")
 def get_user_bookings(user_name: str):
 
     bookings = []
-
     for booking in bookings_collection.find({"user_name": user_name}):
         booking["_id"] = str(booking["_id"])
         bookings.append(booking)
@@ -145,13 +131,12 @@ def get_user_bookings(user_name: str):
     return {"bookings": bookings}
 
 
-# ✅ CANCEL BOOKING (with 24-hour rule)
+# ✅ CANCEL BOOKING
 @router.delete("/booking/{booking_id}")
 def cancel_booking(booking_id: str, reason: str):
 
-    logger.info(f"Cancel request received for booking: {booking_id}")
+    logger.info(f"Cancel request received: {booking_id}")
 
-    # ✅ Validate ObjectId
     try:
         booking_obj_id = ObjectId(booking_id)
     except:
@@ -163,28 +148,18 @@ def cancel_booking(booking_id: str, reason: str):
         raise HTTPException(404, "Booking not found")
 
     if booking["status"] == "cancelled":
-        raise HTTPException(400, "Booking already cancelled")
+        raise HTTPException(400, "Already cancelled")
 
-    # ✅ Safe 24-hour cancellation check
-    try:
-        flight_datetime = datetime.strptime(
-            f"{booking.get('date')} {booking.get('time')}",
-            "%Y-%m-%d %H:%M"
-        )
+    # ✅ FIX: Clean 24-hour logic
+    flight_datetime = datetime.strptime(
+        f"{booking['date']} {booking['time']}",
+        "%Y-%m-%d %H:%M"
+    )
 
-        time_difference = flight_datetime - datetime.now()
+    time_diff = flight_datetime - datetime.now()
 
-        if time_difference.total_seconds() <= 24 * 60 * 60:
-            raise HTTPException(
-                400,
-                "Cannot cancel booking within 24 hours of departure"
-            )
-
-    except ValueError:
-        raise HTTPException(400, "Invalid date/time format in booking")
-
-    except Exception:
-        raise HTTPException(500, "Booking data missing required fields")
+    if time_diff.total_seconds() <= 24 * 60 * 60:
+        raise HTTPException(400, "Cannot cancel within 24 hours")
 
     # ✅ Cancel booking
     bookings_collection.update_one(
@@ -192,8 +167,8 @@ def cancel_booking(booking_id: str, reason: str):
         {
             "$set": {
                 "status": "cancelled",
-                "cancelled_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "cancel_reason": reason
+                "cancel_reason": reason,
+                "cancelled_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
         }
     )
@@ -204,12 +179,12 @@ def cancel_booking(booking_id: str, reason: str):
         {"$inc": {"seats": booking["booked_seats"]}}
     )
 
-    logger.info("Booking cancelled successfully")
+    logger.info("Booking cancelled")
 
     return {"message": "Booking cancelled successfully"}
 
 
-# ✅ BOOKING SUMMARY
+# ✅ SUMMARY
 @router.get("/bookings/{user_name}/summary")
 def get_booking_summary(user_name: str):
 
@@ -225,14 +200,12 @@ def get_booking_summary(user_name: str):
         "status": "cancelled"
     })
 
-    remaining = 3 - confirmed
-    if remaining < 0:
-        remaining = 0
+    remaining = max(0, 3 - confirmed)
 
     return {
         "user_name": user_name,
-        "total_bookings": total,
+        "total": total,
         "confirmed": confirmed,
         "cancelled": cancelled,
-        "remaining_slots": remaining   # ✅ bonus improvement
+        "remaining_slots": remaining
     }
