@@ -41,7 +41,7 @@ def add_flight(flight: FlightCreate):
     data["status"] = "active"
 
     result = flights_collection.insert_one(data)
-
+    return{"message":"Flight added succesfully"}
     return {"id": str(result.inserted_id)}
 
 

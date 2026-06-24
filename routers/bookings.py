@@ -145,4 +145,4 @@ def cancel_booking(booking_id: str):
         {"$inc": {"seats": booking["booked_seats"]}}
     )
 
-    return {"message": "Cancelled"}
+    return {"message": "Booking Cancelled Successfully"}
