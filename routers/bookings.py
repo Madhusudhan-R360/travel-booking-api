@@ -58,6 +58,65 @@ def book_flight(booking: Booking):
         "booking_ref": booking_ref
     }
 
+# ✅ Get all bookings
+@router.get("/bookings")
+def get_all_bookings(limit: int = 5, skip: int = 0):
+
+    cursor = bookings_collection.find() \
+        .sort("created_at", -1) \
+        .skip(skip) \
+        .limit(limit)
+
+    bookings = []
+
+    for booking in cursor:
+        booking["_id"] = str(booking["_id"])
+        bookings.append(booking)
+
+    return {
+        "count": len(bookings),
+        "bookings": bookings
+    }
+
+# ✅ Get bookings by user
+@router.get("/bookings/{user_name}")
+def get_user_bookings(user_name: str):
+
+    bookings = []
+
+    for booking in bookings_collection.find({"user_name": user_name}):
+        booking["_id"] = str(booking["_id"])
+        bookings.append(booking)
+
+    return {"bookings": bookings}
+
+# ✅ Booking summary
+@router.get("/bookings/{user_name}/summary")
+def get_booking_summary(user_name: str):
+
+    total = bookings_collection.count_documents({
+        "user_name": user_name
+    })
+
+    confirmed = bookings_collection.count_documents({
+        "user_name": user_name,
+        "status": "confirmed"
+    })
+
+    cancelled = bookings_collection.count_documents({
+        "user_name": user_name,
+        "status": "cancelled"
+    })
+
+    remaining = max(0, 3 - confirmed)
+
+    return {
+        "user_name": user_name,
+        "total_bookings": total,
+        "confirmed": confirmed,
+        "cancelled": cancelled,
+        "remaining_slots": remaining
+    }
 
 # ✅ Cancel booking
 @router.delete("/booking/{booking_id}")

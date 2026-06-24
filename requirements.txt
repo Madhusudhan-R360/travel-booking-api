@@ -2,5 +2,5 @@ fastapi
 uvicorn
 pydantic
 email-validator
-bson
+pymongo
 mongomock
