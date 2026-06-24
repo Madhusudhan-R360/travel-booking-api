@@ -8,6 +8,7 @@ app.include_router(bookings.router)
 
 @app.get("/")
 def home():
+    print("Main branch change")
     return {"message": "Welcome to Travel API"}
 
 @app.get("/health")
