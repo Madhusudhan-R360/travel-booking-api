@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from bson import ObjectId
 from typing import List, Optional
+from bson.errors import InvalidId
 
 from models.flight import FlightResponse, FlightCreate
 from database.connection import flights_collection, bookings_collection
@@ -22,7 +23,7 @@ def add_flight(flight: FlightCreate):
     })
 
     if existing:
-        raise HTTPException(400, "Flight already exists for this route and date")
+        raise HTTPException(400, "Flight already exists")
 
     try:
         flight_datetime = datetime.strptime(
@@ -36,27 +37,23 @@ def add_flight(flight: FlightCreate):
     except ValueError:
         raise HTTPException(400, "Invalid date/time format")
 
-    flight_data = flight.dict()
-    flight_data["status"] = "active"
+    data = flight.dict()
+    data["status"] = "active"
 
-    result = flights_collection.insert_one(flight_data)
+    result = flights_collection.insert_one(data)
 
-    return {
-        "message": "Flight added",
-        "id": str(result.inserted_id)
-    }
+    return {"id": str(result.inserted_id)}
 
 
 # ✅ Get Flights
 @router.get("/flights", response_model=List[FlightResponse])
-def get_flights(limit: int = 5, skip: int = 0, sort: Optional[str] = None, max_price: Optional[int] = None):
+def get_flights(limit: int = 5, skip: int = 0,
+                sort: Optional[str] = None,
+                max_price: Optional[int] = None):
 
-    query = {
-        "status": "active",
-        "seats": {"$gt": 0}
-    }
+    query = {"status": "active", "seats": {"$gt": 0}}
 
-    if max_price is not None:
+    if max_price:
         query["price"] = {"$lte": max_price}
 
     cursor = flights_collection.find(query)
@@ -69,17 +66,15 @@ def get_flights(limit: int = 5, skip: int = 0, sort: Optional[str] = None, max_p
     cursor = cursor.skip(skip).limit(limit)
 
     flights = []
+    for f in cursor:
+        f["_id"] = str(f["_id"])
 
-    for flight in cursor:
-        flight["_id"] = str(flight["_id"])  # ✅ FIX: keep id
+        f["availability"] = (
+            f"Only {f.get('seats')} left"
+            if f.get("seats", 0) <= 3 else "Available"
+        )
 
-        # ✅ availability info
-        if flight.get("seats", 0) <= 3:
-            flight["availability"] = f"Only {flight.get('seats')} seats left"
-        else:
-            flight["availability"] = "Available"
-
-        flights.append(flight)
+        flights.append(f)
 
     return flights
 
@@ -89,7 +84,7 @@ def get_flights(limit: int = 5, skip: int = 0, sort: Optional[str] = None, max_p
 def search_flights(source: str, destination: str, date: str):
 
     if source.lower() == destination.lower():
-        raise HTTPException(400, "Source and destination cannot be the same")
+        raise HTTPException(400, "Same source & destination")
 
     query = {
         "source": {"$regex": f"^{source}$", "$options": "i"},
@@ -101,78 +96,37 @@ def search_flights(source: str, destination: str, date: str):
 
     flights = []
 
-    for flight in flights_collection.find(query):
-        flight["_id"] = str(flight["_id"])  # ✅ FIX
+    for f in flights_collection.find(query):
+        f["_id"] = str(f["_id"])
 
-        if flight.get("seats", 0) <= 3:
-            flight["availability"] = f"Only {flight.get('seats')} seats left"
-        else:
-            flight["availability"] = "Available"
+        f["availability"] = (
+            f"Only {f.get('seats')} left"
+            if f.get("seats", 0) <= 3 else "Available"
+        )
 
-        flights.append(flight)
+        flights.append(f)
 
-    if not flights:
-        return {"message": "No flights found"}
-
-    return {"flights": flights}
+    return {"flights": flights} if flights else {"message": "No flights found"}
 
 
-# ✅ Full Update
+# ✅ Update Flight
 @router.put("/flights/{flight_id}")
 def update_flight(flight_id: str, flight: FlightCreate):
 
     try:
         obj_id = ObjectId(flight_id)
-    except:
-        raise HTTPException(400, "Invalid flight ID")
-
-    update_data = flight.dict()
-    update_data["status"] = "active"
+    except InvalidId:
+        raise HTTPException(400, "Invalid ID format")
 
     result = flights_collection.update_one(
         {"_id": obj_id},
-        {"$set": update_data}
+        {"$set": flight.dict()}
     )
 
     if result.matched_count == 0:
         raise HTTPException(404, "Flight not found")
 
-    return {"message": "Flight updated successfully"}
-
-
-# ✅ Partial Update
-@router.patch("/flights/{flight_id}")
-def update_flight_partial(flight_id: str, price: Optional[int] = None, seats: Optional[int] = None):
-
-    try:
-        obj_id = ObjectId(flight_id)
-    except:
-        raise HTTPException(400, "Invalid flight ID")
-
-    update_data = {}
-
-    if price is not None:
-        if price <= 0:
-            raise HTTPException(400, "Price must be > 0")
-        update_data["price"] = price
-
-    if seats is not None:
-        if seats <= 0:
-            raise HTTPException(400, "Seats must be > 0")
-        update_data["seats"] = seats
-
-    if not update_data:
-        raise HTTPException(400, "No valid fields to update")
-
-    result = flights_collection.update_one(
-        {"_id": obj_id},
-        {"$set": update_data}
-    )
-
-    if result.matched_count == 0:
-        raise HTTPException(404, "Flight not found")
-
-    return {"message": "Flight updated partially"}
+    return {"message": "Updated"}
 
 
 # ✅ Cancel Flight
@@ -180,33 +134,21 @@ def update_flight_partial(flight_id: str, price: Optional[int] = None, seats: Op
 def cancel_flight(flight_id: str):
 
     try:
-        flight_object_id = ObjectId(flight_id)
-    except:
-        raise HTTPException(400, "Invalid flight ID")
+        obj_id = ObjectId(flight_id)
+    except InvalidId:
+        raise HTTPException(400, "Invalid ID")
 
     result = flights_collection.update_one(
-        {"_id": flight_object_id},
-        {
-            "$set": {
-                "status": "cancelled",
-                "cancelled_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
-        }
+        {"_id": obj_id},
+        {"$set": {"status": "cancelled"}}
     )
 
     if result.matched_count == 0:
         raise HTTPException(404, "Flight not found")
 
-    # ✅ FIX: correct flight_id type handling
     bookings_collection.update_many(
-        {"flight_id": str(flight_object_id)},
-        {
-            "$set": {
-                "status": "cancelled",
-                "cancel_reason": "Flight cancelled by airline",
-                "cancelled_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
-        }
+        {"flight_id": str(obj_id)},
+        {"$set": {"status": "cancelled"}}
     )
 
-    return {"message": "Flight cancelled successfully"}
+    return {"message": "Flight cancelled"}
