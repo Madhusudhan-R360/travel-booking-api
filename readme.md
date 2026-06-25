@@ -58,6 +58,8 @@ docker run -d -p 8000:8000 travel-api
 #Access API
 http://localhost:8000/docs
 
+---
+
 API Endpoints
 
 #Flights
