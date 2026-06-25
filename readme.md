@@ -1,261 +1,119 @@
-## ✅ Update
+# ✈️ Travel Booking API (Full-Stack Backend Project)
 
-Added feature branch workflow demonstration.
+A fully functional **Travel Booking System** built using **FastAPI**, containerized using **Docker**, and managed with **Git & GitHub**.  
+This project simulates real-world backend operations like flight management, bookings, cancellations, and validations.
 
+---
 
-Travel Flight Booking Backend (FastAPI + MongoDB)
+## 🚀 Features
 
-📌 Project Overview
-This project is a backend system for a flight booking platform built using FastAPI and MongoDB (mongomock).
-It simulates real-world airline booking functionality, including flight management, booking workflows, seat handling, and data validation.
-The objective of this project is to gain hands-on experience in backend development, focusing on:
+### ✈️ Flight Management
+- Add new flights
+- Fetch available flights with filters (price, pagination)
+- Search flights by source, destination, and date
+- Update flight details (PUT & PATCH)
+- Cancel flights with booking cascade
 
-REST API design
-Database interactions
-Business logic implementation
-System-level problem solving
+---
 
+### 📦 Booking System
+- Book flights with seat validation
+- Prevent duplicate bookings
+- Max booking limit per user
+- Cancel bookings with seat restoration
+- 24-hour cancellation restriction
 
-🚀 Tech Stack
+---
 
-Backend Framework: FastAPI
-Database: MongoDB (mongomock)
-Language: Python
-Architecture: Modular (routers, models, database, utils)
+### 📊 Booking Insights
+- Get all bookings (pagination)
+- Get bookings by user
+- Booking summary:
+  - Total bookings
+  - Confirmed / Cancelled
+  - Remaining booking slots
 
+---
 
-🏗️ Project Structure
-project/
-│
-├── main.py
-├── models/
-│   ├── flight.py
-│   └── booking.py
+## 🏗️ Tech Stack
+
+- **Backend:** FastAPI (Python)
+- **Database:** MongoDB / Mongomock (for testing)
+- **Containerization:** Docker
+- **Version Control:** Git & GitHub
+- **API Testing:** Swagger UI / Postman
+
+---
+
+## 🐳 Docker Setup
+
+### ✅ Build Image
+
+```bash
+docker build -t travel-api .
+
+#Run the docker container
+docker run -d -p 8000:8000 travel-api
+
+#Access API
+http://localhost:8000/docs
+
+API Endpoints
+
+#Flights
+POST   /flights
+GET    /flights
+GET    /flights/search
+PUT    /flights/{flight_id}
+PATCH  /flights/{flight_id}
+PUT    /flights/{flight_id}/cancel
+
+#Bookings
+POST   /book
+GET    /bookings
+GET    /bookings/{user_name}
+GET    /bookings/{user_name}/summary
+DELETE /booking/{booking_id}
+
+#Key Learnings
+1. Designing RESTful APIs using FastAPI
+2. Implementing business validations & constraints
+3. Handling MongoDB ObjectId correctly
+4. Debugging real-world issues (CORS, Docker, Git)
+5. Using Docker for containerized deployments
+6. Managing Git workflows (branching, PR, merge)
+ 
+ #Project Structure
+travel-booking-api/
 │
 ├── routers/
 │   ├── flights.py
 │   └── bookings.py
 │
+├── models/
+│   ├── flight.py
+│   └── booking.py
+│
 ├── database/
 │   └── connection.py
 │
-├── utils/
-│   └── logger.py
-
-
-✅ Core Features
-✈️ Flight Management
-
-Create Flight (POST /flights)
-Get Flights (GET /flights)
-
-Pagination (limit, skip)
-Sorting (price ascending / descending)
-Filtering (max price)
-
-
-Search Flights (GET /flights/search)
-
-Based on source, destination, and date
-Case-insensitive search (regex)
-
-
-Update Flight
-
-Full update (PUT)
-Partial update (PATCH)
-
-
-Cancel Flight (PUT /flights/{id}/cancel)
-
-Soft delete using status
-Cancellation timestamp tracking
-
-
-📦 Booking System
-
-Book Flight (POST /book)
-Get All Bookings (GET /bookings)
-Get User Bookings (GET /bookings/{user})
-Cancel Booking (DELETE /booking/{id})
-
-Status update (confirmed → cancelled)
-Seat restoration
-Cancellation timestamp + reason
-
-
-
-
-🧠 Business Logic Implemented
-
-Prevent duplicate flights
-Prevent booking cancelled flights
-Prevent booking past flights
-Limit number of bookings per user
-Prevent duplicate bookings for same flight
-Validate inputs (price, seats, route)
-Maintain seat availability consistency
-
-
-⚙️ Advanced Features
-
-✅ Pydantic Models
-
-FlightCreate, Booking → Input validation
-FlightResponse → Controlled API output
-
-Ensures:
-
-Type validation
-Data integrity
-Structured API contracts
-
-
-✅ Atomic Seat Updates
-Python"$inc": {"seats": -booking.seats}Show more lines
-
-Prevents race conditions
-Ensures no overbooking
-Maintains consistency during concurrent requests
-
-
-✅ Denormalization
-Flight details are embedded inside bookings:
-
-Avoids additional DB lookups
-Improves read performance
-
-
-✅ Logging
-Implemented using Python logging module:
-
-Tracks API events
-Helps debugging
-Enables monitoring
-
-
-✅ Indexing
-Indexes added on:
-
-source
-destination
-date
-price
-user_name
-
-Improves query performance and retrieval speed.
-
-✅ Pagination
-Python.skip() and .limit()Show more lines
-
-Efficient handling of large datasets
-Supports scalable data retrieval
-
-
-✅ Sorting & Filtering
-
-Sort flights by price
-Filter based on price range
-
-Improves user search experience.
-
-✅ Case-Insensitive Search
-Implemented using MongoDB regex:
-Python"$regex": "^value$", "$options": "i"Show more lines
-
-Allows flexible search input
-Handles casing variations
-
-
-✅ Status-Based Design
-
-Flights → active / cancelled
-Bookings → confirmed / cancelled
-
-Ensures proper lifecycle management.
-
-✅ Timestamp Tracking
-
-created_at → booking creation
-cancelled_at → cancellation tracking
-
-Supports audit and debugging.
-
-📊 API Endpoints
-✈️ Flights
-
-POST /flights
-GET /flights
-GET /flights/search
-PUT /flights/{id}
-PATCH /flights/{id}
-PUT /flights/{id}/cancel
-
-
-📦 Bookings
-
-POST /book
-GET /bookings
-GET /bookings/{user}
-DELETE /booking/{id}
-
-
-⚙️ Utility
-
-GET / → Service welcome endpoint
-GET /health → Health status check
-
-
-🛡️ Error Handling
-Uses HTTPException with proper status codes:
-
-400 → Invalid request
-404 → Resource not found
-
-Ensures consistent API responses.
-
-🚀 Performance Considerations
-
-Pagination for large datasets
-MongoDB indexing for faster queries
-Atomic operations for consistency
-Optimized query construction
-
-
-🧠 Key Learnings
-
-Designing REST APIs with FastAPI
-Structuring modular backend applications
-Working with MongoDB collections
-Implementing business rules and validations
-Handling concurrent updates safely
-Optimizing queries using indexing
-
-
-⚠️ Note
-This project uses mongomock (in-memory MongoDB) due to environment constraints.
-For production:
-
-Replace with real MongoDB (Atlas/local)
-Add authentication & authorization
-Secure API endpoints
-Use environment configuration
-
-
-📌 Future Improvements
-
-Implement JWT-based authentication
-Add role-based access control
-Introduce service layer architecture
-Integrate with real MongoDB
-Deploy using Docker / Cloud
-
-
-✅ Final Summary
-This project demonstrates a complete backend system for flight booking with:
-
-Flight lifecycle management
-Booking workflows
-Data validation and constraints
-Performance optimizations
-Clean modular architecture
+├── main.py
+├── Dockerfile
+├── requirements.txt
+└── README.md
+
+#Future Enhancements
+🔐 User authentication (JWT)
+💳 Payment integration
+📅 Advanced filtering (date, price range)
+🌐 Frontend (React UI)
+☁️ Deployment (AWS / Azure)
+
+#Author
+Madhusudhan M
+
+#Notes
+This project was built as part of backend engineering practice focusing on:
+1. Real-world API design
+2. Docker & DevOps basics
+3. Git collaboration workflows
