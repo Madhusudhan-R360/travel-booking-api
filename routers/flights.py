@@ -40,6 +40,9 @@ def add_flight(flight: FlightCreate):
     data = flight.dict()
     data["status"] = "active"
 
+    if price > 100000:
+        raise HTTPException(400, "Price too high")
+
     result = flights_collection.insert_one(data)
     return{"message":"Flight added succesfully"}
     return {"id": str(result.inserted_id)}
